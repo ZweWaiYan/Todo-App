@@ -6,7 +6,8 @@ On PhotoListPage
 -----------------
 1. Get JsonHolder data from internet and show with list. (http)
 2. Check internet connection and refresh data depends on internet connection. (connectivity_plus *but version down)
-3. show error message when missing data on list for showing.
+3. Show error message when missing data on list for showing.
+4. Fetch 20 data per one time to show with list. (infinite_scroll_pagination)
 
 On ListPage
 -----------
