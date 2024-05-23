@@ -5,10 +5,12 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 
-Future<List<Photo>> fetchPhotos(http.Client client) async {
-  final response = await client
-      .get(Uri.parse('https://jsonplaceholder.typicode.com/photos'));
+Future<List<Photo>> fetchPhotos(
+    http.Client client, int page, int pageSize) async {
+  final response = await client.get(Uri.parse(
+      'https://jsonplaceholder.typicode.com/photos?_page=$page&_limit=$pageSize'));
 
   if (response.statusCode == 200) {
     return compute(parsePhoto, response.body);
@@ -57,16 +59,24 @@ class PhotoListPage extends StatefulWidget {
 }
 
 class _PhotoListPageState extends State<PhotoListPage> {
-  late Future<List<Photo>> futurePhotos;
   final http.Client httpClient = http.Client();
   late StreamSubscription<ConnectivityResult> _subscription;
   bool _isConnected = false;
+
+  static const _pageSize = 20;
+
+  final PagingController<int, Photo> _pagingController =
+      PagingController(firstPageKey: 1);
 
   @override
   void initState() {
     super.initState();
     _checkConnectivity();
     _subscribeToConnectivityChanges();
+
+    _pagingController.addPageRequestListener((pageKey) {
+      _fetchPage(pageKey);
+    });
   }
 
   void _checkConnectivity() async {
@@ -75,7 +85,7 @@ class _PhotoListPageState extends State<PhotoListPage> {
       setState(() {
         _isConnected = true;
       });
-      _fetchData();
+      _pagingController.refresh();
     } else {
       setState(() {
         _isConnected = false;
@@ -91,7 +101,7 @@ class _PhotoListPageState extends State<PhotoListPage> {
         setState(() {
           _isConnected = true;
         });
-        _fetchData();
+        _pagingController.refresh();
       } else {
         setState(() {
           _isConnected = false;
@@ -100,26 +110,37 @@ class _PhotoListPageState extends State<PhotoListPage> {
     });
   }
 
-  Future<void> _fetchData() async {
-    setState(() {
-      futurePhotos = fetchPhotos(httpClient);
-    });
+  Future<void> _fetchPage(int pageKey) async {
+    try {
+      final newItems = await fetchPhotos(httpClient, pageKey, _pageSize);
+
+      final isLastPage = newItems.length < _pageSize;
+      if (isLastPage) {
+        _pagingController.appendLastPage(newItems);
+      } else {
+        final nextPageKey = pageKey + 1;
+        _pagingController.appendPage(newItems, nextPageKey);
+      }
+    } catch (error) {
+      _pagingController.error = error;
+    }
   }
 
   @override
   void dispose() {
     _subscription.cancel();
     httpClient.close();
+    _pagingController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Photot App',
+      title: 'Photo App',
       theme: ThemeData(
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.blue, //use your hex code here
+          backgroundColor: Colors.blue,
         ),
       ),
       home: SafeArea(
@@ -131,34 +152,20 @@ class _PhotoListPageState extends State<PhotoListPage> {
             ),
           ),
           body: _isConnected
-              ? FutureBuilder<List<Photo>>(
-                  future: futurePhotos,
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text('An error has occurred!'),
-                            const SizedBox(height: 8),
-                            ElevatedButton(
-                              onPressed: _fetchData,
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      );
-                    } else if (snapshot.hasData) {
-                      return RefreshIndicator(
-                        onRefresh: _fetchData,
-                        child: PhotoList(photos: snapshot.data!),
-                      );
-                    } else {
-                      return const Center(
-                        child: CircularProgressIndicator(),
-                      );
-                    }
-                  },
+              ? RefreshIndicator(
+                  onRefresh: () => Future.sync(
+                    () => _pagingController.refresh(),
+                  ),
+                  child: PagedListView<int, Photo>(
+                    pagingController: _pagingController,
+                    builderDelegate: PagedChildBuilderDelegate<Photo>(
+                      animateTransitions: false,
+                      transitionDuration: const Duration(milliseconds: 500),
+                      itemBuilder: (context, item, index) => PhotoList(
+                        photos: [item],
+                      ),
+                    ),
+                  ),
                 )
               : Center(
                   child: Column(
@@ -186,27 +193,27 @@ class PhotoList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      itemCount: photos.length,
-      itemBuilder: (context, index) {
-        return ListTile(
-          leading: Image.network(
-            photos[index].thumbnailUrl,
-            errorBuilder: (context, error, stackTrace) =>
-                Image.asset('assets/no-image.png'),
+    return Column(
+      children: photos.map((photo) {
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          child: ListTile(
+            leading: Image.network(
+              photo.thumbnailUrl,
+              errorBuilder: (context, error, stackTrace) =>
+                  Image.asset('assets/no-image.png'),
+            ),
+            title: Text(photo.title),
+            subtitle: Text('ID: ${photo.id}'),
           ),
-          title: Text(photos[index].title),
-          subtitle: Text('Album ID: ${photos[index].albumId}'),
-          dense: true,
-          onTap: () {},
         );
-      },
+      }).toList(),
     );
   }
 }
-
 
 // This project included functions...
 //1. Get JsonHolder data from internet and show with list. (http)
 //2. Check internet connection and refresh data depends on internet connection. (connectivity_plus *but version down)
 //3. show error message when missing data on list for showing.
+//4. fetch 20 data per one time to show with list. (infinite_scroll_pagination)
