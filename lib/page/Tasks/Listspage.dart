@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:to_do_lists/modal/Tasks.dart';
-import 'package:to_do_lists/page/DetailPage.dart';
-import 'package:to_do_lists/page/MarkedPage.dart';
+import 'package:to_do_lists/page/Tasks/DetailPage.dart';
+import 'package:to_do_lists/page/Tasks/MarkedPage.dart';
 
 class ListsPage extends StatelessWidget {
   static const routeName = '/';

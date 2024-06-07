@@ -26,3 +26,4 @@ flutter:
   assets:
     - assets/loading-photo.png
     - assets/no-image.png
+    - assets/user.png
